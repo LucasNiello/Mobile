@@ -1,0 +1,52 @@
+rules_version = '2';
+
+// Regras de segurança do Cloud Firestore — Mapa de Locais
+//
+// 1. Só usuários autenticados acessam o banco. O app faz login anônimo ao
+//    abrir, então quem usa o app passa; requisições sem login são negadas.
+// 2. Toda gravação é validada: só os 8 campos do modelo, com tipo e tamanho
+//    corretos (ex.: avaliação entre 0 e 5). Dados malformados são recusados.
+// 3. Qualquer outra coleção fica fechada.
+//
+// Limitação conhecida: login anônimo não diferencia administrador de usuário
+// comum. Para isso seria preciso login real + perfis (desafio extra nível 3).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function localValido(dados) {
+      let campos = ['nome', 'categoria', 'cidade', 'avaliacao',
+                    'distancia', 'horario', 'descricao', 'favorito'];
+      return dados.keys().hasOnly(campos)
+        && dados.keys().hasAll(campos)
+        && dados.nome is string
+        && dados.nome.size() > 0 && dados.nome.size() <= 60
+        && dados.categoria is string
+        && dados.categoria.size() > 0 && dados.categoria.size() <= 30
+        && dados.cidade is string
+        && dados.cidade.size() > 0 && dados.cidade.size() <= 40
+        && dados.avaliacao is number
+        && dados.avaliacao >= 0 && dados.avaliacao <= 5
+        && dados.distancia is number
+        && dados.distancia >= 0 && dados.distancia <= 1000
+        && dados.horario is string && dados.horario.size() <= 30
+        && dados.descricao is string && dados.descricao.size() <= 500
+        && dados.favorito is bool;
+    }
+
+    match /locais/{localId} {
+      allow read: if autenticado();
+      allow create, update: if autenticado()
+                            && localValido(request.resource.data);
+      allow delete: if autenticado();
+    }
+
+    match /{documento=**} {
+      allow read, write: if false;
+    }
+  }
+}
